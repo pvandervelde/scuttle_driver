@@ -4,15 +4,14 @@ import rospy
 import numpy as np
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import JointState
-from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3, PoseWithCovarianceStamped
+from geometry_msgs.msg import Point, Pose, Quaternion, Twist, Vector3, PoseStamped, PoseWithCovarianceStamped
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 from std_msgs.msg import Header
-from scuttlepy import SCUTTLE
+from ddcontroller import DDRobot
 
 def commandVelocity(msg):
 
-    # rospy.loginfo("Linear Velocity: "+str(round(msg.linear.x, 3))+" \tAngular Velocity: "+str(round(msg.angular.z, 3)))
-    scuttle.setMotion([msg.linear.x, msg.angular.z])
+    robot.set_motion([msg.linear.x, msg.angular.z])
 
 def updatePose(msg):
 
@@ -23,12 +22,12 @@ def updatePose(msg):
     orientation_list = [orientation.x, orientation.y, orientation.z, orientation.w]
     (roll, pitch, yaw) = euler_from_quaternion(orientation_list)
 
-    scuttle.setHeading(yaw)
-    scuttle.setGlobalPosition([position.x, position.y])
+    robot.define_heading(yaw)
+    robot.define_global_position([position.x, position.y])
 
 if __name__=="__main__":
 
-    scuttle = SCUTTLE(openLoop=True)
+    robot = DDRobot()
 
     rospy.init_node("scuttle_driver")
     r = rospy.Rate(50) # 50hz
@@ -50,9 +49,9 @@ if __name__=="__main__":
 
             current_time = rospy.Time.now()
 
-            x, y = scuttle.getGlobalPosition()
-            vx, vth = scuttle.getMotion()
-            th = scuttle.getHeading()
+            x, y = robot.get_global_position()
+            vx, vth = robot.get_motion()
+            th = robot.get_heading()
 
             odom_quat = tf.transformations.quaternion_from_euler(0, 0, th)
 
@@ -81,15 +80,13 @@ if __name__=="__main__":
                                     0, 0, 0, 0, 0, 0.1]
 
             odom.child_frame_id = "base_link"
-            odom.twist.twist = Twist(Vector3(0, vx, 0), Vector3(0, 0, 0))
+            odom.twist.twist = Twist(Vector3(vx, 0, 0), Vector3(0, 0, 0))
 
             odom_pub.publish(odom)
 
             # Publish joint state when enable_joint_state_publish is true
             if enable_joint_state_publish is True:
                 myJointStatePublisher = rospy.Publisher('joint_states', JointState, queue_size=10)
-                # pub = rospy.Publisher('joint_states', JointState, queue_size=10)
-                # rospy.init_node('joint_state_publisher')
                 jointState = JointState()
 
                 jointState.header = Header()
@@ -104,8 +101,8 @@ if __name__=="__main__":
                                    'l_caster_wheel_joint'
                                   ]
 
-                jointState.position = [scuttle.leftWheel.encoder.position * ((2 * np.pi) / scuttle.leftWheel.encoder.resolution),
-                                       scuttle.rightWheel.encoder.position * ((2 * np.pi) / scuttle.rightWheel.encoder.resolution),
+                jointState.position = [robot.left_wheel.encoder.position * ((2 * np.pi) / robot.left_wheel.encoder.resolution),
+                                       robot.right_wheel.encoder.position * ((2 * np.pi) / robot.right_wheel.encoder.resolution),
                                        0,
                                        0,
                                        0,
@@ -126,4 +123,4 @@ if __name__=="__main__":
         # pass
 
     finally:
-        scuttle.stop()
+        robot.stop()
